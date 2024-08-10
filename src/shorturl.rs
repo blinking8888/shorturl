@@ -8,11 +8,34 @@ use url::Url;
 #[derive(Debug, Serialize, Deserialize, Clone, Hash, Eq, PartialEq)]
 pub struct ShortUrl(Url);
 
+impl From<Url> for ShortUrl {
+    fn from(value: Url) -> Self {
+        Self(value)
+    }
+}
+
 pub const DEFAULT_SHORTENED_LENGTH: u8 = 5;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[serde(transparent)]
 pub struct ShortUrlLength(u8);
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Hash)]
+#[serde(transparent)]
+pub struct ShortPath(String);
+
+impl ShortPath {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl Deref for ShortPath {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
 
 impl ShortUrlLength {
     pub fn new(length: u8) -> Result<Self> {
@@ -48,10 +71,10 @@ impl Display for ShortUrl {
 }
 
 impl ShortUrl {
-    pub fn generate(long_url: &Url, short_length: Option<ShortUrlLength>) -> String {
+    pub fn generate(long_url: &Url, short_length: Option<ShortUrlLength>) -> ShortPath {
         let mut hash = base62::encode(long_url.as_str().as_bytes());
         hash.truncate(short_length.unwrap_or_default().value().into());
-        hash
+        ShortPath(hash)
     }
 }
 

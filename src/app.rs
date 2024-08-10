@@ -1,11 +1,18 @@
 use std::{str::FromStr, sync::Arc};
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
-use log::{error, info};
+use anyhow::Result;
+use axum::extract::State;
+use axum::{routing::post, Json, Router};
+use log::info;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use url::Url;
 
-use crate::shorturl::{ShortUrl, ShortUrlLength};
+use crate::{
+    database::Database,
+    error::AppError,
+    shorturl::{ShortUrl, ShortUrlLength},
+};
 
 pub struct App;
 
@@ -14,6 +21,7 @@ pub struct Config {
     base_url: Url,
     port: u16,
     short_url_length: ShortUrlLength,
+    database: Database,
 }
 
 impl Default for Config {
@@ -22,7 +30,14 @@ impl Default for Config {
             base_url: Url::from_str("http://localhost:7777").unwrap(),
             port: 7777,
             short_url_length: ShortUrlLength::default(),
+            database: Database::default(),
         }
+    }
+}
+
+impl Config {
+    pub fn set_database(&mut self, database: Database) {
+        self.database = database;
     }
 }
 
@@ -31,29 +46,38 @@ struct ShortenParameters {
     url: Url,
 }
 
+type AppState = Arc<Mutex<Config>>;
+
 impl App {
     async fn shorten(
-        State(config): State<Arc<Config>>,
+        State(config): State<AppState>,
         Json(body): Json<ShortenParameters>,
-    ) -> impl IntoResponse {
-        let short_url = ShortUrl::generate(&body.url, Some(config.as_ref().short_url_length));
-        let short_url = config.as_ref().base_url.join(&short_url);
+    ) -> Result<String, AppError> {
+        let mut config = config.lock().await;
 
-        short_url.map_or_else(
-            |e| {
-                error!("shorten(): {}", &e);
-                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-            },
-            |u| {
-                info!("Shortend URL for {} is {}", body.url, &u);
-                (StatusCode::OK, u.to_string())
-            },
-        )
+        let short_path = ShortUrl::generate(&body.url, Some(config.short_url_length));
+        let short_url = config.base_url.join(&short_path).map_err(|e| {
+            log::error!("{}", &e);
+            AppError::internal_error(e.to_string())
+        })?;
+
+        log::info!("{} => {}", &short_url, &body.url);
+        if let Some(old_url) = config.database.set(short_path, body.url) {
+            log::warn!(
+                "Hashing collision for {} redirecting to {}",
+                &short_url,
+                old_url
+            );
+        }
+
+        config.database.save()?;
+
+        Ok(short_url.to_string())
     }
 
     pub fn serve(config: Config) -> tokio::task::JoinHandle<()> {
         let bind_address = format!("0.0.0.0:{}", config.port);
-        let state = Arc::new(config);
+        let state = Arc::new(Mutex::new(config));
         let router = Router::new()
             .route("/:shorten", post(Self::shorten))
             .with_state(state);

@@ -2,8 +2,10 @@
 
 /// Main Application interface
 pub mod app;
-mod database;
+pub mod database;
+mod error;
 mod shorturl;
 
 /// Make it convenient for the user to use
 pub use app::{App, Config};
+pub use database::Database;
