@@ -1,13 +1,17 @@
 use std::{str::FromStr, sync::Arc};
 
 use anyhow::Result;
-use axum::extract::State;
+use axum::body::Body;
+use axum::extract::{Path, State};
+use axum::http::{Response, StatusCode};
+use axum::routing::get;
 use axum::{routing::post, Json, Router};
 use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use url::Url;
 
+use crate::shorturl::ShortPath;
 use crate::{
     database::Database,
     error::AppError,
@@ -75,11 +79,32 @@ impl App {
         Ok(short_url.to_string())
     }
 
+    async fn short_path(
+        Path(short_path): Path<ShortPath>,
+        State(config): State<AppState>,
+    ) -> Result<Response<Body>, AppError> {
+        let db = &config.lock().await.database;
+        if let Some(redirect_url) = db.get(&short_path) {
+            info!("Redirecting {} => {}", short_path.as_str(), &redirect_url);
+            Response::builder()
+                .header("Location", redirect_url.to_string())
+                .status(StatusCode::FOUND)
+                .body(Body::empty())
+                .map_err(|e| AppError::internal_error(e.to_string()))
+        } else {
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::empty())
+                .map_err(|e| AppError::internal_error(e.to_string()))
+        }
+    }
+
     pub fn serve(config: Config) -> tokio::task::JoinHandle<()> {
         let bind_address = format!("0.0.0.0:{}", config.port);
         let state = Arc::new(Mutex::new(config));
         let router = Router::new()
-            .route("/:shorten", post(Self::shorten))
+            .route("/shorten", post(Self::shorten))
+            .route("/:short_path", get(Self::short_path))
             .with_state(state);
 
         tokio::spawn(async move {
