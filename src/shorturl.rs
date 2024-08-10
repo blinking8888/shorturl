@@ -48,7 +48,7 @@ impl Display for ShortUrl {
 }
 
 impl ShortUrl {
-    pub fn generate(long_url: Url, short_length: Option<ShortUrlLength>) -> String {
+    pub fn generate(long_url: &Url, short_length: Option<ShortUrlLength>) -> String {
         let mut hash = base62::encode(long_url.as_str().as_bytes());
         hash.truncate(short_length.unwrap_or_default().value().into());
         hash

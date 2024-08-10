@@ -1,6 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -35,12 +36,18 @@ impl App {
         State(config): State<Arc<Config>>,
         Json(body): Json<ShortenParameters>,
     ) -> impl IntoResponse {
-        let short_url = ShortUrl::generate(body.url, Some(config.as_ref().short_url_length));
+        let short_url = ShortUrl::generate(&body.url, Some(config.as_ref().short_url_length));
         let short_url = config.as_ref().base_url.join(&short_url);
 
         short_url.map_or_else(
-            |u| (StatusCode::OK, u.to_string()),
-            |e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            |e| {
+                error!("shorten(): {}", &e);
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            },
+            |u| {
+                info!("Shortend URL for {} is {}", body.url, &u);
+                (StatusCode::OK, u.to_string())
+            },
         )
     }
 
@@ -53,9 +60,9 @@ impl App {
 
         tokio::spawn(async move {
             let listener = tokio::net::TcpListener::bind(&bind_address).await.unwrap();
-            println!("Serving at {}", bind_address);
+            info!("Serving at {}", bind_address);
             axum::serve(listener, router).await.unwrap();
-            eprintln!("Server exited for some reason!");
+            info!("Server exited for some reason!");
         })
     }
 }
