@@ -10,6 +10,8 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use url::Url;
+use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::shorturl::ShortPath;
 use crate::{
@@ -45,40 +47,58 @@ impl Config {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema, IntoParams)]
 struct ShortenParameters {
+    #[param(style=Form, example = "https://www.example.com", required, allow_reserved)]
     url: Url,
 }
 
 type AppState = Arc<Mutex<Config>>;
 
-impl App {
-    async fn shorten(
-        State(config): State<AppState>,
-        Json(body): Json<ShortenParameters>,
-    ) -> Result<String, AppError> {
-        let mut config = config.lock().await;
+#[derive(OpenApi)]
+#[openapi(paths(shorten), components(schemas(ShortenParameters)),    tags(
+    (name = "shorten", description = "Simple URL Shortener")
+),)]
+pub struct ShortenUrlApi;
 
-        let short_path = ShortUrl::generate(&body.url, Some(config.short_url_length));
-        let short_url = config.base_url.join(&short_path).map_err(|e| {
-            log::error!("{}", &e);
-            AppError::internal_error(e.to_string())
-        })?;
+/// Shortens the given URL
+#[utoipa::path(
+    tag = "shorten",
+    post,
+    path = "/shorten",
+    params(ShortenParameters),
+    responses(
+        (status = 200, description = "Shortened the given URL", body = String),
+        (status = 500, description = "The server encountered an error", body = String)
+    )
+)]
+async fn shorten(
+    State(config): State<AppState>,
+    Json(body): Json<ShortenParameters>,
+) -> Result<String, AppError> {
+    let mut config = config.lock().await;
 
-        log::info!("{} => {}", &short_url, &body.url);
-        if let Some(old_url) = config.database.set(short_path, body.url) {
-            log::warn!(
-                "Hashing collision for {} redirecting to {}",
-                &short_url,
-                old_url
-            );
-        }
+    let short_path = ShortUrl::generate(&body.url, Some(config.short_url_length));
+    let short_url = config.base_url.join(&short_path).map_err(|e| {
+        log::error!("{}", &e);
+        AppError::internal_error(e.to_string())
+    })?;
 
-        config.database.save()?;
-
-        Ok(short_url.to_string())
+    log::info!("{} => {}", &short_url, &body.url);
+    if let Some(old_url) = config.database.set(short_path, body.url) {
+        log::warn!(
+            "Hashing collision for {} redirecting to {}",
+            &short_url,
+            old_url
+        );
     }
 
+    config.database.save()?;
+
+    Ok(short_url.to_string())
+}
+
+impl App {
     async fn short_path(
         Path(short_path): Path<ShortPath>,
         State(config): State<AppState>,
@@ -103,7 +123,8 @@ impl App {
         let bind_address = format!("0.0.0.0:{}", config.port);
         let state = Arc::new(Mutex::new(config));
         let router = Router::new()
-            .route("/shorten", post(Self::shorten))
+            .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ShortenUrlApi::openapi()))
+            .route("/shorten", post(shorten))
             .route("/:short_path", get(Self::short_path))
             .with_state(state);
 
