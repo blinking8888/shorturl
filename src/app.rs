@@ -4,13 +4,14 @@ use anyhow::Result;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{Response, StatusCode};
+use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{routing::post, Json, Router};
 use log::info;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use url::Url;
-use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa::{IntoParams, OpenApi, ToResponse, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::shorturl::ShortPath;
@@ -53,12 +54,30 @@ struct ShortenParameters {
     url: Url,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema, ToResponse)]
+#[serde(rename_all = "camelCase")]
+struct ShortenResponse {
+    url: Url,
+    short_url: Url,
+}
+impl IntoResponse for ShortenResponse {
+    fn into_response(self) -> Response<Body> {
+        Response::builder()
+            .header("Content-Type", "application/json")
+            .status(StatusCode::OK)
+            .body(Body::from(serde_json::to_string(&self).unwrap()))
+            .unwrap()
+    }
+}
+
 type AppState = Arc<Mutex<Config>>;
 
 #[derive(OpenApi)]
-#[openapi(paths(shorten), components(schemas(ShortenParameters)),    tags(
-    (name = "shorten", description = "Simple URL Shortener")
-),)]
+#[openapi(paths(shorten),
+    components(schemas(ShortenParameters), schemas(ShortenResponse), schemas(AppError)),
+    tags(
+        (name = "shorten", description = "Simple URL Shortener")
+    ),)]
 pub struct ShortenUrlApi;
 
 /// Shortens the given URL
@@ -68,14 +87,14 @@ pub struct ShortenUrlApi;
     path = "/shorten",
     params(ShortenParameters),
     responses(
-        (status = 200, description = "Shortened the given URL", body = String),
-        (status = 500, description = "The server encountered an error", body = String)
+        (status = 200, description = "Shortened the given URL", body = ShortenResponse),
+        (status = 500, description = "The server encountered an error", body = AppError)
     )
 )]
 async fn shorten(
     State(config): State<AppState>,
     Json(body): Json<ShortenParameters>,
-) -> Result<String, AppError> {
+) -> Result<ShortenResponse, AppError> {
     let mut config = config.lock().await;
 
     let short_path = ShortUrl::generate(&body.url, Some(config.short_url_length));
@@ -85,7 +104,7 @@ async fn shorten(
     })?;
 
     log::info!("{} => {}", &short_url, &body.url);
-    if let Some(old_url) = config.database.set(short_path, body.url) {
+    if let Some(old_url) = config.database.set(short_path, body.url.clone()) {
         log::warn!(
             "Hashing collision for {} redirecting to {}",
             &short_url,
@@ -95,7 +114,10 @@ async fn shorten(
 
     config.database.save()?;
 
-    Ok(short_url.to_string())
+    Ok(ShortenResponse {
+        url: body.url,
+        short_url,
+    })
 }
 
 impl App {

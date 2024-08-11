@@ -5,9 +5,12 @@ use axum::{
     http::{Response, StatusCode},
     response::IntoResponse,
 };
+use utoipa::{ToResponse, ToSchema};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ToResponse, ToSchema)]
+#[response(description = "Error in processing the request")]
 pub struct AppError {
+    #[schema(value_type=i32)]
     error_code: StatusCode,
     message: String,
 }
