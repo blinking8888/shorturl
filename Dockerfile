@@ -33,13 +33,15 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt-get install --no-install-recommends -y ca-certificates && \
     apt-get clean
 
-VOLUME /data
 
 # Create a work directory
 WORKDIR /app
 
+VOLUME /app/data
+
 # Set the user as the owner of the application directory
 RUN chown -R nobody /app
+RUN mkdir -p /app/data && chown -R nobody /app/data
 
 # Switch to the non-root user
 USER nobody
@@ -55,5 +57,4 @@ COPY --from=builder /app/build/release/shorturl /app/shorturl
 
 EXPOSE ${PORT}
 
-ENTRYPOINT [ "sh", "-c", "/app/shorturl" ]
-CMD [ "-p $PORT -s $SHORTURL_LENGTH -d /app/data/shorturls.db" ]
+CMD [ "sh", "-c", "/app/shorturl -p $PORT -s $SHORTURL_LENGTH -d /app/data/shorturls.db" ]

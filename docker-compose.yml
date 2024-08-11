@@ -13,3 +13,5 @@ services:
 
 volumes:
   shorturl_data:
+    external: true
+    name: "shorturl_data"
