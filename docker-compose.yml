@@ -1,0 +1,14 @@
+services:
+  shorturl:
+    container_name: shorturl
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - shorturl_data:/app/data
+    ports:
+      - "7777:7777"
+    restart: unless-stopped
+
+volumes:
+  shorturl_data:
