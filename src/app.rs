@@ -25,10 +25,10 @@ pub struct App;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
-    base_url: Url,
-    port: u16,
-    short_url_length: ShortUrlLength,
-    database: Database,
+    pub base_url: Url,
+    pub port: u16,
+    pub short_url_length: ShortUrlLength,
+    pub database: Database,
 }
 
 impl Default for Config {
@@ -39,12 +39,6 @@ impl Default for Config {
             short_url_length: ShortUrlLength::default(),
             database: Database::default(),
         }
-    }
-}
-
-impl Config {
-    pub fn set_database(&mut self, database: Database) {
-        self.database = database;
     }
 }
 

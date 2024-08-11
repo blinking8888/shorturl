@@ -1,6 +1,7 @@
 # Define build-time arguments
 ARG RUST_VERSION=1.77.0
 ARG PORT=7777
+ARG SHORTURL_LENGTH=5
 
 # Stage 1: Build the Application
 FROM rust:${RUST_VERSION}-slim-bullseye AS builder
@@ -45,11 +46,14 @@ USER nobody
 
 # Set the environment variable with the application name
 ARG PORT=$PORT
-ENV PORT="$PORT"
+ENV PORT=$PORT
+ARG SHORTURL_LENGTH=$SHORTURL_LENGTH
+ENV SHORTURL_LENGTH=$SHORTURL_LENGTH
 
 # Copy the built application
 COPY --from=builder /app/build/release/shorturl /app/shorturl
 
 EXPOSE ${PORT}
 
-CMD ["/app/shorturl" ]
+ENTRYPOINT [ "sh", "-c", "/app/shorturl" ]
+CMD [ "-p $PORT -s $SHORTURL_LENGTH -d /app/data/shorturls.db" ]

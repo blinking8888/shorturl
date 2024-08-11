@@ -1,5 +1,6 @@
 services:
   shorturl:
+    env_file: ".env"
     container_name: shorturl
     build:
       context: .
