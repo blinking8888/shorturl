@@ -1,9 +1,9 @@
 # Shorturl
 
-Simple URL shortener service.
+Simple URL shortener service written in pure Rust with the [`axum`](https://github.com/tokio-rs/axum) framework.
 
-For more information on how to use, go to the `/docs` endpoint to access the SwaggerUI inteface.
-(http://localhost:7777/docs)
+For more information on how to use, go to the [`/docs`](http://localhost:7777/docs) endpoint to access the SwaggerUI inteface.
+SwaggerUI documentation was generated using [`utoipa`](https://github.com/juhaku/utoipa) with [`utoipa-swagger-ui`](https://github.com/juhaku/utoipa/tree/master/utoipa-swagger-ui)
 
 ## Shorten the URL
 
